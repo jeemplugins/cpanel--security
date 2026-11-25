@@ -48,6 +48,7 @@ func write(t *testing.T, p, body string, mode os.FileMode) {
 }
 
 func TestQuarantineAndRestoreRoundTrip(t *testing.T) {
+	skipUnlessRoot(t)
 	e := setup(t)
 	orig := filepath.Join(e.home, "public_html", "shell.php")
 
@@ -149,6 +150,7 @@ func TestFileOwnedBySomeoneElseRejected(t *testing.T) {
 }
 
 func TestRestoreRules(t *testing.T) {
+	skipUnlessRoot(t)
 	e := setup(t)
 	it, err := e.store.Quarantine(e.acct, "public_html/shell.php", "", now)
 	if err != nil {
@@ -195,5 +197,14 @@ func TestRestoreRules(t *testing.T) {
 		if _, err := e.store.Restore(e.acct, id); !errors.Is(err, ErrNotFound) {
 			t.Errorf("id %q: err = %v", id, err)
 		}
+	}
+}
+
+// Quarantined copies are mode 0000, so only root (as the daemon runs) can
+// read them back. Restore tests need root; CI runs them with sudo.
+func skipUnlessRoot(t *testing.T) {
+	t.Helper()
+	if os.Getuid() != 0 {
+		t.Skip("restore needs root: the quarantined copy is mode 0000")
 	}
 }

@@ -130,6 +130,9 @@ func TestUserCannotReachOtherAccountByPath(t *testing.T) {
 }
 
 func TestUserFlowAndIsolation(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skip("restore needs root: the quarantined copy is mode 0000")
+	}
 	f := newFixture(t)
 	r := f.srv.Handle(user("alice", "quarantine", map[string]string{"path": "public_html/bad.php"}))
 	if !r.OK {

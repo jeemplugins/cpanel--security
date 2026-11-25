@@ -23,6 +23,9 @@ jobs:
         run: |
           go vet ./...
           go test -race ./...
+      - name: Go tests as root (restore reads mode-0000 quarantine files, as the root daemon does)
+        working-directory: daemon
+        run: sudo env "PATH=$PATH" GOCACHE=/tmp/gocache-root go test -race ./...
       - name: Build daemon
         run: make build
       - name: Perl syntax
