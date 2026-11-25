@@ -6,6 +6,7 @@ import (
 	"net"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -52,6 +53,13 @@ func Parse(line string) (Event, bool) {
 		return Event{}, false
 	}
 	return build(f)
+}
+
+// LooksLikeFailure reports whether a line mentions a failed login. When it
+// is true but Parse fails, the line is in a format this parser doesn't
+// know, and failures from it would be missed.
+func LooksLikeFailure(line string) bool {
+	return strings.Contains(line, "FAILED LOGIN")
 }
 
 func build(f fields) (Event, bool) {

@@ -77,3 +77,12 @@ func TestParseCurrentFormat(t *testing.T) {
 		}
 	}
 }
+
+func TestLooksLikeFailure(t *testing.T) {
+	if !LooksLikeFailure(`some new format 203.0.113.1 FAILED LOGIN cpaneld: bad`) {
+		t.Fatal("missed")
+	}
+	if LooksLikeFailure(`[2026-11-25 19:40:16 +0000] info [whostmgrd] 203.0.113.1 - root "POST /login/ HTTP/1.1" DEFERRED LOGIN`) {
+		t.Fatal("false positive")
+	}
+}

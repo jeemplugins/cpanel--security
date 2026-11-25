@@ -137,9 +137,21 @@ func run(cfgPath string, dryRun bool) error {
 
 	if cfg.BruteForce.Enabled {
 		f := &tail.Follower{Path: cfg.LoginLog, Interval: time.Second, Backlog: 1 << 20}
+		var unknown int
 		go f.Run(ctx, func(line string) {
 			ev, ok := loginlog.Parse(line)
 			if !ok {
+				// Warn on the 1st, 100th, 10000th... unparsed failure, so a
+				// login_log format change can't silently switch blocking off.
+				if loginlog.LooksLikeFailure(line) {
+					unknown++
+					if isPow100(unknown) {
+						if len(line) > 300 {
+							line = line[:300]
+						}
+						log.Printf("warning: %d failed-login line(s) in an unknown format were not counted; latest: %q", unknown, line)
+					}
+				}
 				return
 			}
 			ban, err := det.Observe(ev, time.Now())
@@ -172,6 +184,13 @@ func run(cfgPath string, dryRun bool) error {
 	err = srv.Serve(ctx, ln)
 	saveBans()
 	return err
+}
+
+func isPow100(n int) bool {
+	for n%100 == 0 {
+		n /= 100
+	}
+	return n == 1
 }
 
 // cPanel usernames: lowercase letters and digits, starting with a letter.
