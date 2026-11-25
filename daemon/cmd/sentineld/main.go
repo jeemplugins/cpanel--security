@@ -86,9 +86,22 @@ func run(cfgPath string, dryRun bool) error {
 	} else if err := det.Restore(saved, time.Now()); err != nil {
 		return fmt.Errorf("restore bans: %w", err)
 	}
+	unblockedFile := filepath.Join(cfg.StateDir, "unblocked.json")
+	if b, err := os.ReadFile(unblockedFile); err == nil {
+		var c map[string]time.Time
+		if err := json.Unmarshal(b, &c); err != nil {
+			log.Printf("ignoring saved unblocks: %v", err)
+		} else {
+			det.RestoreCleared(c, time.Now())
+		}
+	}
 	saveBans := func() {
-		if err := writeJSON(bansFile, det.Bans(time.Now())); err != nil {
+		now := time.Now()
+		if err := writeJSON(bansFile, det.Bans(now)); err != nil {
 			log.Printf("save bans: %v", err)
+		}
+		if err := writeJSON(unblockedFile, det.Cleared(now)); err != nil {
+			log.Printf("save unblocks: %v", err)
 		}
 	}
 

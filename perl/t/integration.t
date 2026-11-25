@@ -42,15 +42,21 @@ print {$cf} JSON::PP->new->encode(
 );
 close $cf;
 
-my $pid = fork // die;
-if ( !$pid ) {
-    open STDOUT, '>', "$dir/daemon.out";
-    open STDERR, '>&', \*STDOUT;
-    exec $bin, '-config', $config, '-dry-run' or die;
+my $pid;
+sub start_daemon {
+    unlink $sock;
+    $pid = fork // die;
+    if ( !$pid ) {
+        open STDOUT, '>>', "$dir/daemon.out";
+        open STDERR, '>&', \*STDOUT;
+        exec $bin, '-config', $config, '-dry-run' or die;
+    }
+    for ( 1 .. 50 ) { last if -S $sock; sleep 0.1 }
 }
-END { if ($pid) { kill "TERM", $pid; waitpid $pid, 0 } }
+sub stop_daemon { kill "TERM", $pid; waitpid $pid, 0; undef $pid }
+END { stop_daemon() if $pid }
 
-for ( 1 .. 50 ) { last if -S $sock; sleep 0.1 }
+start_daemon();
 ok( -S $sock, 'daemon listening' ) or BAIL_OUT('daemon did not start');
 is( ( stat $sock )[2] & 07777, 0600, 'socket is mode 0600' );
 
@@ -84,6 +90,13 @@ is( scalar @$fails, 6, 'six failures recorded' );
 ok( $call->( 'unblock_ip', { ip => '203.0.113.66' } )->{ok}, 'unblock' );
 is( scalar @{ $call->('list_bans')->{data} || [] }, 0, 'ban lifted' );
 
+# A restart re-reads the log; the forgiven failures must not re-ban the IP.
+stop_daemon();
+start_daemon();
+ok( -S $sock, 'daemon restarted' ) or BAIL_OUT('daemon did not restart');
+sleep 1.5;    # give the log follower time to replay
+is( scalar @{ $call->('list_bans')->{data} || [] }, 0, 'unblock survives a restart' );
+
 ok( !$call->( 'block_ip', { ip => '127.0.0.1' } )->{ok}, 'cannot block an allowlisted IP' );
 
 # A user caller can't use admin verbs, and unknown accounts are refused.
@@ -94,8 +107,6 @@ my $audit = $call->( 'audit_log', { limit => 20 } )->{data};
 ok( ( grep { $_->{verb} eq 'auto_block' } @$audit ), 'auto block audited' );
 ok( ( grep { $_->{verb} eq 'unblock_ip' && $_->{remote_ip} eq '192.0.2.10' } @$audit ), 'admin unblock audited with IP' );
 
-kill "TERM", $pid;
-waitpid $pid, 0;
-undef $pid;
+stop_daemon();
 
 done_testing;

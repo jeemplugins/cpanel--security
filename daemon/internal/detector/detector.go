@@ -52,6 +52,10 @@ type Detector struct {
 	failures map[string][]time.Time
 	bans     map[string]*Ban
 	recent   []Failure
+	// cleared holds when an admin last lifted each IP's ban. Failures
+	// logged at or before that time never count again, so re-reading the
+	// log after a restart doesn't undo an unblock.
+	cleared map[string]time.Time
 }
 
 func New(cfg Config, fw firewall.Firewall) (*Detector, error) {
@@ -66,6 +70,7 @@ func New(cfg Config, fw firewall.Firewall) (*Detector, error) {
 		fw:       fw,
 		failures: map[string][]time.Time{},
 		bans:     map[string]*Ban{},
+		cleared:  map[string]time.Time{},
 	}, nil
 }
 
@@ -97,6 +102,9 @@ func (d *Detector) Observe(ev loginlog.Event, now time.Time) (*Ban, error) {
 	// Old log lines (for example on first start) count only if they are
 	// still inside the window.
 	if ev.Time.Before(now.Add(-d.cfg.Window)) || already || d.Allowed(ev.IP) {
+		return nil, nil
+	}
+	if c, ok := d.cleared[key]; ok && !ev.Time.After(c) {
 		return nil, nil
 	}
 
@@ -152,8 +160,8 @@ func (d *Detector) BlockManual(ip net.IP, dur time.Duration, reason string, now 
 	return &b, nil
 }
 
-// Unblock lifts a ban early.
-func (d *Detector) Unblock(ip net.IP) error {
+// Unblock lifts a ban early. Failures logged up to now are forgiven.
+func (d *Detector) Unblock(ip net.IP, now time.Time) error {
 	if ip == nil {
 		return fmt.Errorf("invalid IP")
 	}
@@ -167,7 +175,43 @@ func (d *Detector) Unblock(ip net.IP) error {
 	}
 	delete(d.bans, ip.String())
 	delete(d.failures, ip.String())
+	d.cleared[ip.String()] = now
 	return nil
+}
+
+// Cleared returns the unblock times that still matter: those inside the
+// window, since older failures are ignored anyway.
+func (d *Detector) Cleared(now time.Time) map[string]time.Time {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.pruneClearedLocked(now)
+	out := make(map[string]time.Time, len(d.cleared))
+	for k, v := range d.cleared {
+		out[k] = v
+	}
+	return out
+}
+
+// RestoreCleared loads unblock times saved before a restart. Call it
+// before the log is replayed.
+func (d *Detector) RestoreCleared(c map[string]time.Time, now time.Time) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for k, v := range c {
+		if ip := net.ParseIP(k); ip != nil {
+			d.cleared[ip.String()] = v
+		}
+	}
+	d.pruneClearedLocked(now)
+}
+
+func (d *Detector) pruneClearedLocked(now time.Time) {
+	cutoff := now.Add(-d.cfg.Window)
+	for k, t := range d.cleared {
+		if t.Before(cutoff) {
+			delete(d.cleared, k)
+		}
+	}
 }
 
 // Bans returns active bans, soonest-expiring last.
@@ -229,6 +273,7 @@ func (d *Detector) Prune(now time.Time) {
 			delete(d.failures, k)
 		}
 	}
+	d.pruneClearedLocked(now)
 }
 
 func (d *Detector) expireLocked(now time.Time) {

@@ -113,13 +113,13 @@ func TestManualBlockAndUnblock(t *testing.T) {
 	if fw.Blocked["203.0.113.50"] != time.Hour {
 		t.Fatal("default ban duration not applied")
 	}
-	if err := d.Unblock(ip); err != nil {
+	if err := d.Unblock(ip, t0); err != nil {
 		t.Fatal(err)
 	}
 	if fw.Has("203.0.113.50") || len(d.Bans(t0)) != 0 {
 		t.Fatal("unblock did not clear ban")
 	}
-	if err := d.Unblock(ip); err == nil {
+	if err := d.Unblock(ip, t0); err == nil {
 		t.Fatal("unblocking a non-blocked IP should error")
 	}
 }
@@ -158,5 +158,54 @@ func TestRecentIsBoundedAndNewestFirst(t *testing.T) {
 func TestParseAllowlistRejectsJunk(t *testing.T) {
 	if _, err := ParseAllowlist([]string{"nope"}); err == nil {
 		t.Fatal("junk accepted")
+	}
+}
+
+// Re-reading the log after a restart must not re-ban an IP the admin
+// unblocked: the old failures were already forgiven.
+func TestUnblockSurvivesLogReplay(t *testing.T) {
+	d, fw := newDet(t)
+	ip := "203.0.113.77"
+	var fails []loginlog.Event
+	for i := 0; i < 3; i++ {
+		fails = append(fails, ev(ip, t0.Add(time.Duration(i)*time.Second)))
+	}
+	for _, e := range fails {
+		d.Observe(e, e.Time)
+	}
+	if !fw.Has(ip) {
+		t.Fatal("not banned")
+	}
+	unblockAt := t0.Add(time.Minute)
+	if err := d.Unblock(net.ParseIP(ip), unblockAt); err != nil {
+		t.Fatal(err)
+	}
+
+	// "Restart": a fresh detector gets the saved state, then the log replays.
+	restartAt := unblockAt.Add(time.Minute)
+	saved := d.Cleared(restartAt)
+	d2, fw2 := newDet(t)
+	d2.RestoreCleared(saved, restartAt)
+	for _, e := range fails {
+		if ban, _ := d2.Observe(e, restartAt); ban != nil {
+			t.Fatal("replayed failures re-banned an unblocked IP")
+		}
+	}
+	if fw2.Has(ip) {
+		t.Fatal("firewall re-blocked after replay")
+	}
+
+	// New failures after the unblock still count.
+	for i := 1; i <= 3; i++ {
+		at := restartAt.Add(time.Duration(i) * time.Second)
+		d2.Observe(ev(ip, at), at)
+	}
+	if !fw2.Has(ip) {
+		t.Fatal("fresh attack after unblock was not banned")
+	}
+
+	// Unblock times older than the window are dropped.
+	if got := d2.Cleared(unblockAt.Add(11 * time.Minute)); len(got) != 0 {
+		t.Fatalf("stale unblock kept: %v", got)
 	}
 }

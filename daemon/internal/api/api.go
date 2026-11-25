@@ -165,7 +165,7 @@ func (s *Server) admin(req Request) Response {
 		if ip == nil {
 			return fail("invalid IP address")
 		}
-		if err := s.Detector.Unblock(ip); err != nil {
+		if err := s.Detector.Unblock(ip, time.Now()); err != nil {
 			return fail(err.Error())
 		}
 		s.bansChanged()
