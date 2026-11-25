@@ -1,7 +1,8 @@
 package Sentinel::CPanel;
 
 # The cPanel (account owner) page. It runs as the account's own user and
-# reaches the daemon only through the Sentinel AdminBin.
+# reaches the daemon only through the Sentinel UAPI module, which calls the
+# Sentinel AdminBin (root), which calls sentineld.
 
 use strict;
 use warnings;
@@ -11,20 +12,20 @@ use Sentinel::HTML ();
 *esc      = \&Sentinel::HTML::esc;
 *fmt_time = \&Sentinel::HTML::fmt_time;
 
-# Map form actions to AdminBin functions. Nothing else is callable.
+# Map form actions to UAPI functions. Nothing else is callable.
 my %ACTIONS = (
-    quarantine => [ 'QUARANTINE',     'path', 'File moved to quarantine.' ],
-    restore    => [ 'RESTORE',        'id',   'File restored.' ],
-    allowlist  => [ 'ALLOWLIST_FILE', 'path', 'File marked as safe.' ],
+    quarantine => [ 'quarantine',     'path', 'File moved to quarantine.' ],
+    restore    => [ 'restore',        'id',   'File restored.' ],
+    allowlist  => [ 'allowlist_file', 'path', 'File marked as safe.' ],
 );
 
-# $adminbin is a code ref: ($function, @args) -> response hashref.
-# Production passes a wrapper around Cpanel::AdminBin::Call::call.
+# $uapi is a code ref: ($function, %args) -> { ok, data | error }.
+# Production passes a wrapper around Cpanel::LiveAPI->uapi('Sentinel', ...).
 sub handle_post {
-    my ( $adminbin, $form ) = @_;
+    my ( $uapi, $form ) = @_;
     my $a = $ACTIONS{ $form->{action} // '' } or return ( undef, 'Unknown action.' );
     my ( $fn, $field, $done ) = @$a;
-    my $r = $adminbin->( $fn, $form->{$field} // '' );
+    my $r = $uapi->( $fn, $field => $form->{$field} // '' );
     return $r->{ok} ? ( $done, undef ) : ( undef, $r->{error} // 'Request failed.' );
 }
 
@@ -79,6 +80,16 @@ sub body {
 
     push @o, '</div>';
     return join "\n", grep { length } @o;
+}
+
+# Turns a Cpanel::LiveAPI uapi() return value into { ok, data | error }.
+sub uapi_result {
+    my ($r) = @_;
+    my $res = ref $r eq 'HASH' ? ( $r->{cpanelresult}{result} // $r->{result} // $r ) : undef;
+    return { ok => 0, error => 'The security service is unavailable.' } unless ref $res eq 'HASH';
+    return { ok => 1, data => $res->{data} } if $res->{status};
+    my $errs = ref $res->{errors} eq 'ARRAY' ? join( ' ', @{ $res->{errors} } ) : '';
+    return { ok => 0, error => length $errs ? $errs : 'Request failed.' };
 }
 
 1;

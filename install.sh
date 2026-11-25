@@ -11,7 +11,8 @@ LIB_DIR=$CP/3rdparty/sentinel/lib
 WHM_CGI=$CP/whostmgr/docroot/cgi/sentinel
 WHM_ICON_DIR=$CP/whostmgr/docroot/addon_plugins
 CP_FRONTEND=$CP/base/frontend/jupiter/sentinel
-ADMINBIN_DIR=$CP/bin/admin/Sentinel
+ADMINBIN_DIR=/var/cpanel/perl/Cpanel/Admin/Modules/Sentinel
+UAPI_DIR=$CP/Cpanel/API
 CONF_DIR=/etc/sentinel
 STATE_DIR=/var/lib/sentinel
 LOG_DIR=/var/log/sentinel
@@ -40,7 +41,9 @@ CP_MAJOR=$(echo "$CP_VERSION" | cut -d. -f1)
 if [ -e /etc/csf/csf.conf ]; then
     warn "CSF is installed. Sentinel uses its own nftables table and does not change CSF rules, but check the two don't both block the same traffic."
 fi
-if [ -e /usr/bin/imunify360-agent ]; then
+# Only the paid Imunify360 blocks brute force; the free ImunifyAV ships the
+# same agent binary, so check for the firewall package instead.
+if rpm -q imunify360-firewall >/dev/null 2>&1 || dpkg -s imunify360-firewall >/dev/null 2>&1; then
     warn "Imunify360 is installed and already does brute-force blocking. Consider disabling one of them."
 fi
 
@@ -80,11 +83,12 @@ install -m 0700 "$SRC/whm/cgi/sentinel/index.cgi" "$WHM_CGI/index.cgi"
 install -m 0644 "$SRC/assets/sentinel.png" "$WHM_ICON_DIR/sentinel.png"
 $CP/bin/register_appconfig "$SRC/whm/sentinel.conf" >/dev/null
 
-# 5. AdminBin adapter -------------------------------------------------------
-step "Installing AdminBin adapter"
+# 5. AdminBin module and UAPI module -----------------------------------------
+step "Installing AdminBin and UAPI modules"
+rm -rf $CP/bin/admin/Sentinel   # layout used by versions before 0.1.1
 install -d -m 0755 "$ADMINBIN_DIR"
-install -m 0700 "$SRC/adminbin/Sentinel/Sentinel" "$ADMINBIN_DIR/Sentinel"
-install -m 0644 "$SRC/adminbin/Sentinel/Sentinel.conf" "$ADMINBIN_DIR/Sentinel.conf"
+install -m 0644 "$SRC/adminbin/Cpanel/Admin/Modules/Sentinel/Sentinel.pm" "$ADMINBIN_DIR/Sentinel.pm"
+install -m 0644 "$SRC/uapi/Cpanel/API/Sentinel.pm" "$UAPI_DIR/Sentinel.pm"
 
 # 6. cPanel plugin (Jupiter) ------------------------------------------------
 step "Installing cPanel plugin"

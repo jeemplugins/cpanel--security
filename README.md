@@ -16,15 +16,15 @@ Malware scanning, file-integrity monitoring and the WAF come in later pull reque
 ## How it fits together
 
 ```
-WHM page (root) ───────────────┐
-                               ├─> Unix socket 0600 ─> sentineld (root) ─> nftables
-cPanel page (user) ─> AdminBin ┘                          │
-                      (stamps the real username)          └─> /var/lib/sentinel (bans, quarantine)
+WHM page (root) ────────────────────────┐
+                                        ├─> Unix socket 0600 ─> sentineld (root) ─> nftables
+cPanel page (user) ─> UAPI ─> AdminBin ─┘                          │
+                              (stamps the real username)           └─> /var/lib/sentinel (bans, quarantine)
 ```
 
 - `sentineld` is a single static Go binary. Only it does privileged work.
 - Its socket is root-only (mode 0600), and it also checks that the peer is uid 0.
-- The cPanel page runs as the account's user and can reach the daemon only through the AdminBin. The AdminBin allows exactly four verbs (`list_findings`, `quarantine`, `restore`, `allowlist_file`) and sends the username cPanel verified. The daemon never takes a username from the request.
+- The cPanel page runs as the account's user and can reach the daemon only through the `Sentinel` UAPI module, which calls the AdminBin (cPanel forbids uncompiled Perl from calling an AdminBin directly). The AdminBin allows exactly four verbs (`list_findings`, `quarantine`, `restore`, `allowlist_file`) and sends the username cPanel verified. The daemon never takes a username from the request.
 - User paths are walked one directory at a time from the account's home folder with `O_NOFOLLOW`, and `..` is rejected. This defeats symlink and `../` tricks, including swapping a folder for a symlink mid-request. Files must be owned by the account. Restore never overwrites an existing file and never writes through a symlink.
 - Quarantined copies are owned by root with mode 0000. Nothing is ever deleted outright.
 - Every external command runs with an argument array. Nothing goes through a shell.
@@ -62,7 +62,8 @@ daemon/                  Go daemon (sentineld)
 perl/lib/Sentinel/       shared Perl: socket client, WHM and cPanel page rendering
 whm/                     WHM AppConfig and CGI
 cpanel/                  cPanel plugin (install.json, Jupiter page)
-adminbin/                AdminBin adapter
+adminbin/                AdminBin module (Cpanel::Admin::Modules::Sentinel::Sentinel)
+uapi/                    UAPI module (Cpanel::API::Sentinel)
 packaging/               systemd unit, default config
 assets/                  icons
 install.sh, uninstall.sh
@@ -77,11 +78,17 @@ make build && sudo SENTINELD=dist/sentineld prove -Iperl/lib perl/t/integration.
 
 The end-to-end test starts the real daemon with a dry-run firewall and writes a brute-force attack into a log file. It then checks that the attacker is blocked and the allowlisted IP is not, that unblocking works, and that every step lands in the audit log. CI runs all of this on every pull request.
 
-## Not yet verified on a real cPanel server
+## Tested on a real server
 
-Everything here was checked without a cPanel install. Before relying on it, test it on a cPanel trial VM:
+Tested on AlmaLinux 9 with cPanel & WHM 138 (without a license, so the pages were run from the command line, not a browser):
 
-- The `login_log` line format the parser expects.
-- AdminBin details: the `Cpanel::Admin::Base` module style and `mode=full` in `Sentinel.conf`.
-- How `install_plugin` handles `install.json`, and whether the new `sentinel` feature is on by default in Feature Manager.
-- `Whostmgr::HTMLInterface` header and footer. The page falls back to plain HTML if they are missing.
+- Install, uninstall and reinstall. The socket is mode 0600 and the nftables table is created.
+- Brute-force blocking from the real `login_log` (cPanel 138 format), unblock, and the audit log.
+- The WHM page run as root: every section renders, POST block works, non-root is refused, allowlisted IPs can't be blocked.
+- Quarantine and restore for an account, and refusal of `../` and symlink escapes.
+
+## Not yet verified
+
+- The cPanel and WHM pages in a browser (needs a licensed server).
+- The UAPI to AdminBin path end to end, after the fixes from the first server test.
+- Whether the new `sentinel` feature is on by default in Feature Manager.

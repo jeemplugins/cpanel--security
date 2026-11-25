@@ -1,15 +1,16 @@
-#!/usr/local/cpanel/3rdparty/bin/perl
+package Cpanel::Admin::Modules::Sentinel::Sentinel;
 
-# AdminBin adapter: the only way a cPanel user can reach sentineld.
+# AdminBin module: the only way a cPanel user can reach sentineld.
 #
 # cPanel runs this as root on the user's behalf and tells us who the
 # caller is. We forward a fixed set of verbs to the daemon, stamped with
 # that username. Nothing the user sends can change who they are.
 #
-# Installed to /usr/local/cpanel/bin/admin/Sentinel/Sentinel (mode 0700)
-# with Sentinel.conf beside it.
-
-package bin::admin::Sentinel::Sentinel;
+# Installed to /var/cpanel/perl/Cpanel/Admin/Modules/Sentinel/Sentinel.pm
+# and called from the UAPI module Cpanel::API::Sentinel with
+#   Cpanel::AdminBin::Call::call('Sentinel', 'Sentinel', 'LIST_FINDINGS')
+# (cPanel 138 refuses AdminBin calls from uncompiled Perl such as a
+# .live.pl page, so the page goes through UAPI.)
 
 use strict;
 use warnings;
@@ -21,12 +22,14 @@ use parent qw( Cpanel::Admin::Base );
 use Sentinel::Client ();
 
 # The allowlist of verbs. Anything else is refused by Cpanel::Admin::Base.
-use constant _actions => qw(
-  LIST_FINDINGS
-  QUARANTINE
-  RESTORE
-  ALLOWLIST_FILE
-);
+sub _actions {
+    return qw(
+      LIST_FINDINGS
+      QUARANTINE
+      RESTORE
+      ALLOWLIST_FILE
+    );
+}
 
 sub LIST_FINDINGS {
     my ($self) = @_;
@@ -69,7 +72,5 @@ sub _forward {
         args   => $args,
     );
 }
-
-__PACKAGE__->run() if !caller;
 
 1;

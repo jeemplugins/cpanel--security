@@ -61,10 +61,11 @@ my $call  = sub { Sentinel::Client::call( verb => $_[0], caller => $admin, args 
 ok( $call->('status')->{ok}, 'status' );
 
 # Simulate a brute-force attack: 3 failures from one IP, 2 from the allowlist.
-my $ts = strftime( '%m/%d/%Y:%H:%M:%S -0000', gmtime );
+my $ts = strftime( '%Y-%m-%d %H:%M:%S +0000', gmtime );
 open $lf, '>>', $log or die;
 for my $ip ( ('203.0.113.66') x 3, ('127.0.0.1') x 3 ) {
-    print {$lf} qq{$ip - root [$ts] "POST /login/?login_only=1 HTTP/1.1" FAILED LOGIN whostmgrd: user password incorrect\n};
+    # Format written by cPanel 138.
+    print {$lf} qq{[$ts] info [whostmgrd] $ip - root "POST /login/?login_only=1 HTTP/1.1" FAILED LOGIN whostmgrd: user password incorrect\n};
 }
 close $lf;
 

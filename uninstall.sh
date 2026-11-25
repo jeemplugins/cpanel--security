@@ -26,8 +26,9 @@ if [ -x $CP/scripts/uninstall_plugin ] && [ -f "$SRC/cpanel/install.json" ]; the
 fi
 rm -rf $CP/base/frontend/jupiter/sentinel
 
-echo "==> Removing AdminBin adapter and WHM plugin"
-rm -rf $CP/bin/admin/Sentinel
+echo "==> Removing AdminBin, UAPI and WHM plugin"
+rm -rf $CP/bin/admin/Sentinel /var/cpanel/perl/Cpanel/Admin/Modules/Sentinel
+rm -f  $CP/Cpanel/API/Sentinel.pm
 [ -x $CP/bin/unregister_appconfig ] && $CP/bin/unregister_appconfig sentinel >/dev/null 2>&1 || true
 rm -rf $CP/whostmgr/docroot/cgi/sentinel
 rm -f  $CP/whostmgr/docroot/addon_plugins/sentinel.png

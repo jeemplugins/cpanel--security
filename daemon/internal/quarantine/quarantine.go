@@ -204,7 +204,7 @@ func (s *Store) List(user string) ([]Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []Item
+	out := []Item{}
 	for _, e := range entries {
 		id, ok := strings.CutSuffix(e.Name(), ".json")
 		if !ok {

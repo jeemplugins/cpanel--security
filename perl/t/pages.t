@@ -51,27 +51,34 @@ subtest 'cPanel page' => sub {
     like( $html, qr/value="a{32}"/, 'restore form carries id' );
 };
 
-subtest 'cPanel actions map only to the four AdminBin functions' => sub {
+subtest 'cPanel actions map only to the four UAPI functions' => sub {
     my @calls;
     my $fake = sub { push @calls, [@_]; return { ok => 1 } };
 
     my ( $msg, $err ) = Sentinel::CPanel::handle_post( $fake, { action => 'quarantine', path => 'public_html/x.php', user => 'bob' } );
     is( $msg, 'File moved to quarantine.' );
-    is_deeply( $calls[-1], [ 'QUARANTINE', 'public_html/x.php' ], 'user field is not forwarded' );
+    is_deeply( $calls[-1], [ 'quarantine', path => 'public_html/x.php' ], 'user field is not forwarded' );
 
     Sentinel::CPanel::handle_post( $fake, { action => 'restore', id => 'f' x 32 } );
-    is_deeply( $calls[-1], [ 'RESTORE', 'f' x 32 ] );
+    is_deeply( $calls[-1], [ 'restore', id => 'f' x 32 ] );
 
     Sentinel::CPanel::handle_post( $fake, { action => 'allowlist', path => 'p' } );
-    is_deeply( $calls[-1], [ 'ALLOWLIST_FILE', 'p' ] );
+    is_deeply( $calls[-1], [ 'allowlist_file', path => 'p' ] );
 
     my $n = @calls;
     ( $msg, $err ) = Sentinel::CPanel::handle_post( $fake, { action => 'block_ip', ip => '1.2.3.4' } );
     is( $err, 'Unknown action.' );
-    is( scalar @calls, $n, 'unknown action never reaches AdminBin' );
+    is( scalar @calls, $n, 'unknown action never reaches UAPI' );
 
     ( $msg, $err ) = Sentinel::CPanel::handle_post( sub { { ok => 0, error => 'path is outside the account\'s home directory' } }, { action => 'quarantine', path => '../x' } );
     like( $err, qr/outside/ );
+};
+
+subtest 'uapi_result' => sub {
+    is_deeply( Sentinel::CPanel::uapi_result( { cpanelresult => { result => { status => 1, data => { a => 1 } } } } ), { ok => 1, data => { a => 1 } } );
+    is_deeply( Sentinel::CPanel::uapi_result( { result => { status => 0, errors => ['nope'] } } ), { ok => 0, error => 'nope' } );
+    ok( !Sentinel::CPanel::uapi_result(undef)->{ok}, 'undef is an error' );
+    is( Sentinel::CPanel::uapi_result( { status => 0 } )->{error}, 'Request failed.' );
 };
 
 done_testing;
