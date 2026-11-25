@@ -1,0 +1,13 @@
+[
+  {
+    "type": "link",
+    "id": "sentinel",
+    "name": "Security",
+    "group_id": "security",
+    "order": 50,
+    "uri": "sentinel/index.live.pl",
+    "target": "_self",
+    "feature": "sentinel",
+    "icon": "sentinel.svg"
+  }
+]

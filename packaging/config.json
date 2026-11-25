@@ -1,0 +1,13 @@
+{
+  "socket": "/run/sentinel/sentinel.sock",
+  "state_dir": "/var/lib/sentinel",
+  "audit_log": "/var/log/sentinel/audit.log",
+  "login_log": "/usr/local/cpanel/logs/login_log",
+  "brute_force": {
+    "enabled": true,
+    "threshold": 10,
+    "window_minutes": 10,
+    "ban_minutes": 60,
+    "allowlist": ["127.0.0.0/8", "::1"]
+  }
+}

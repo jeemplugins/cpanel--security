@@ -1,0 +1,36 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l daemon)"
+      - name: Go vet and unit tests
+        working-directory: daemon
+        run: |
+          go vet ./...
+          go test -race ./...
+      - name: Build daemon
+        run: make build
+      - name: Perl syntax
+        run: |
+          for f in perl/lib/Sentinel/*.pm; do perl -Iperl/lib -c "$f"; done
+          bash -n install.sh
+          bash -n uninstall.sh
+      - name: Perl tests
+        run: prove -Iperl/lib perl/t/
+      - name: End-to-end brute-force test (needs root)
+        run: sudo SENTINELD=dist/sentineld prove -v -Iperl/lib perl/t/integration.t
