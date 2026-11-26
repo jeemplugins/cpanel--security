@@ -1,0 +1,22 @@
+[Unit]
+Description=Sentinel security daemon for cPanel & WHM
+After=network-online.target nftables.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/sentineld -config /etc/sentinel/config.json
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=sentinel
+RuntimeDirectoryMode=0700
+UMask=0077
+# The daemon needs root for nftables and for reading/moving tenants' files.
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target

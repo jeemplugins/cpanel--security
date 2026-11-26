@@ -1,0 +1,76 @@
+package Cpanel::Admin::Modules::Sentinel::Sentinel;
+
+# AdminBin module: the only way a cPanel user can reach sentineld.
+#
+# cPanel runs this as root on the user's behalf and tells us who the
+# caller is. We forward a fixed set of verbs to the daemon, stamped with
+# that username. Nothing the user sends can change who they are.
+#
+# Installed to /var/cpanel/perl/Cpanel/Admin/Modules/Sentinel/Sentinel.pm
+# and called from the UAPI module Cpanel::API::Sentinel with
+#   Cpanel::AdminBin::Call::call('Sentinel', 'Sentinel', 'LIST_FINDINGS')
+# (cPanel 138 refuses AdminBin calls from uncompiled Perl such as a
+# .live.pl page, so the page goes through UAPI.)
+
+use strict;
+use warnings;
+
+use lib '/usr/local/cpanel/3rdparty/sentinel/lib';
+
+use parent qw( Cpanel::Admin::Base );
+
+use Sentinel::Client ();
+
+# The allowlist of verbs. Anything else is refused by Cpanel::Admin::Base.
+sub _actions {
+    return qw(
+      LIST_FINDINGS
+      QUARANTINE
+      RESTORE
+      ALLOWLIST_FILE
+    );
+}
+
+sub LIST_FINDINGS {
+    my ($self) = @_;
+    return $self->_forward( 'list_findings', {} );
+}
+
+sub QUARANTINE {
+    my ( $self, $path ) = @_;
+    return _bad('Enter a file path.') unless _ok_path($path);
+    return $self->_forward( 'quarantine', { path => $path } );
+}
+
+sub RESTORE {
+    my ( $self, $id ) = @_;
+    return _bad('Invalid item.') unless defined $id && !ref $id && $id =~ /\A[0-9a-f]{32}\z/;
+    return $self->_forward( 'restore', { id => $id } );
+}
+
+sub ALLOWLIST_FILE {
+    my ( $self, $path ) = @_;
+    return _bad('Enter a file path.') unless _ok_path($path);
+    return $self->_forward( 'allowlist_file', { path => $path } );
+}
+
+# The daemon re-checks every path against the account's home directory;
+# this is only a cheap first filter.
+sub _ok_path {
+    my ($p) = @_;
+    return defined $p && !ref $p && length $p && length $p <= 4096 && $p !~ /\0/;
+}
+
+sub _bad { return { ok => 0, error => $_[0] } }
+
+sub _forward {
+    my ( $self, $verb, $args ) = @_;
+    my $user = $self->get_caller_username();
+    return Sentinel::Client::call(
+        verb   => $verb,
+        caller => { role => 'user', user => $user },
+        args   => $args,
+    );
+}
+
+1;
