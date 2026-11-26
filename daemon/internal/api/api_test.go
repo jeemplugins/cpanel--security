@@ -172,7 +172,7 @@ func TestAdminBlockUnblockAndAudit(t *testing.T) {
 	if f.fw.Blocked["203.0.113.7"] != 30*time.Minute {
 		t.Fatalf("fw = %v", f.fw.Blocked)
 	}
-	for _, bad := range []map[string]string{{"ip": "nope"}, {"ip": "127.0.0.1"}, {"ip": "1.2.3.4", "minutes": "-1"}} {
+	for _, bad := range []map[string]string{{"ip": "nope"}, {"ip": "127.0.0.1"}, {"ip": "1.2.3.4", "minutes": "-1"}, {"ip": "192.0.2.10"}} {
 		if r := f.srv.Handle(admin("block_ip", bad)); r.OK {
 			t.Errorf("accepted %v", bad)
 		}

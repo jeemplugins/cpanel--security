@@ -143,6 +143,10 @@ func (s *Server) admin(req Request) Response {
 		if ip == nil {
 			return fail("invalid IP address")
 		}
+		// Never let an admin lock themselves out of WHM.
+		if self := net.ParseIP(req.Caller.RemoteIP); self != nil && self.Equal(ip) {
+			return fail("refusing to block your own IP address")
+		}
 		mins, _ := strconv.Atoi(a["minutes"])
 		if mins < 0 || mins > 60*24*365 {
 			return fail("minutes out of range")
