@@ -29,6 +29,41 @@ cPanel page (user) ─> UAPI ─> AdminBin ─┘                          │
 - Quarantined copies are owned by root with mode 0000. Nothing is ever deleted outright.
 - Every external command runs with an argument array. Nothing goes through a shell.
 
+## Pricing and licensing
+
+Sentinel is a paid product, sold as a subscription for each server. The price depends on how many cPanel accounts the server hosts. Every plan has every feature, so the only difference is server size.
+
+| Plan | cPanel accounts on the server | Monthly, per server | Yearly, per server (2 months free) |
+|---|---|---|---|
+| Solo | up to 30 | $6 | $60 |
+| Pro | up to 250 | $12 | $120 |
+| Unlimited | no limit | $20 | $200 |
+
+**Multi-server discount.** The discount is applied automatically to each server once the customer's total number of active servers reaches a band:
+
+| Active servers on one customer account | Discount |
+|---|---|
+| 1 to 4 | none |
+| 5 to 19 | 10% |
+| 20 to 49 | 20% |
+| 50 or more | 30%, or a custom quote for data centres |
+
+**Free trial.** Every server starts with a 30-day trial with all features. It needs only an email address, no card. There is one trial per server and per email address, so reinstalling doesn't reset it. Reminders go out 7 days and 1 day before it ends, and then there are 7 days of grace with a renew banner in WHM.
+
+**How a licence is used.**
+
+- A customer account (an email address) owns one subscription with a number of server seats, and gets one licence key.
+- Running `sentinel activate <key>` on a server uses one seat and binds it to that server (machine ID, main IP and hostname).
+- In the customer portal the customer sees every activated server with its plan and account count. They can deactivate a server to free its seat, for example when moving hosts, up to 3 moves a month per seat.
+- The daemon reports the server's account count once a day. If a server grows past its plan, the admin gets 14 days of warnings to upgrade. After that Sentinel keeps protecting the accounts it already covers but doesn't add new ones beyond the limit. It never switches protection off for existing accounts.
+- The licence check runs once a day and sends only the key, the server fingerprint and the account count. The licence file is signed and cached, so if the licence server can't be reached Sentinel keeps working for 14 days.
+
+**When a licence lapses** (after the trial's grace period, or an unpaid subscription), Sentinel goes into expired mode. Existing bans run out on their own schedule, installed WAF rules stay in place, and quarantined files stay restorable. New scans, new blocks and signature updates stop until the customer pays. Sentinel never deletes data or breaks sites when a licence lapses.
+
+**Complimentary licences.** The vendor can issue free licences (for partners, reviewers or charities, for example) with a chosen plan, number of seats and expiry. They work like paid licences, show as "Complimentary" to the customer, and can be revoked at any time.
+
+Licensing isn't built yet: this scaffold has no licence check, and `sentinel activate` doesn't exist yet. Full detail is in the [design spec](https://claude.ai/artifact/JyyxjVFMvHEmqnvqk87Tpo), section "Licensing and membership".
+
 ## Install
 
 On the cPanel server, as root:
