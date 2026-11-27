@@ -12,6 +12,8 @@ Report it privately through GitHub instead:
 2. Click **Report a vulnerability**.
 3. Fill in the form. Only the maintainers can see your report.
 
+If you can't use GitHub, email [jassim.mohammad@jeemplugins.com](mailto:jassim.mohammad@jeemplugins.com) instead, with "Security" in the subject line.
+
 A good report includes:
 
 - What the problem is and what an attacker could do with it.
