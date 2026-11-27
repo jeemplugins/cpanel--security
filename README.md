@@ -75,7 +75,7 @@ make build        # needs Go 1.24+; or copy a prebuilt dist/sentineld here
 ./install.sh
 ```
 
-Supported systems are AlmaLinux, Rocky and CloudLinux 8 and 9, and Ubuntu 22.04 and 24.04, running cPanel 110 or later. Running `install.sh` again upgrades in place and keeps your config, bans and quarantine.
+Supported cPanel versions are 110 (LTS), 134 (LTS), 136 and 138, on AlmaLinux or CloudLinux 8 and 9, or Ubuntu 24.04. Older servers on Rocky Linux 8 or 9, or Ubuntu 22.04 (which cPanel supports only up to version 134), also work, but cPanel no longer installs new servers on those systems. So far only cPanel 138 on AlmaLinux 9 has been tested. Running `install.sh` again upgrades in place and keeps your config, bans and quarantine.
 
 Uninstall with `./uninstall.sh`. This removes all bans. It keeps config, quarantine and logs unless you pass `--purge`.
 
