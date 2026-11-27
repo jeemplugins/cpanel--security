@@ -35,7 +35,7 @@ func setup(t *testing.T) env {
 	return env{
 		home:  home,
 		other: other,
-		acct:  Account{User: "alice", Home: home, UID: uint32(os.Getuid()), GID: uint32(os.Getgid())},
+		acct:  Account{User: "alice", Home: home, UID: uint32(os.Getuid()), GID: uint32(os.Getgid()), Created: "1764000000"},
 		store: &Store{Dir: qdir},
 	}
 }
@@ -70,7 +70,7 @@ func TestQuarantineAndRestoreRoundTrip(t *testing.T) {
 		t.Fatalf("item = %+v", it)
 	}
 
-	list, _ := e.store.List("alice")
+	list, _ := e.store.ListFor(e.acct)
 	if len(list) != 1 || list[0].ID != it.ID {
 		t.Fatalf("list = %+v", list)
 	}
@@ -85,7 +85,7 @@ func TestQuarantineAndRestoreRoundTrip(t *testing.T) {
 	if st, _ := os.Stat(orig); st.Mode().Perm() != 0o644 {
 		t.Fatalf("restored mode = %v", st.Mode().Perm())
 	}
-	if list, _ := e.store.List(""); len(list) != 0 {
+	if list, _ := e.store.List(); len(list) != 0 {
 		t.Fatal("item left in store after restore")
 	}
 }
@@ -134,7 +134,7 @@ func TestPathEscapesRejected(t *testing.T) {
 	if b, err := os.ReadFile(filepath.Join(e.other, "secret.txt")); err != nil || string(b) != "bob's secret" {
 		t.Fatal("bob's file was touched")
 	}
-	if list, _ := e.store.List(""); len(list) != 0 {
+	if list, _ := e.store.List(); len(list) != 0 {
 		t.Fatalf("something was quarantined: %+v", list)
 	}
 }
@@ -161,6 +161,16 @@ func TestRestoreRules(t *testing.T) {
 	bob := Account{User: "bob", Home: e.other, UID: e.acct.UID, GID: e.acct.GID}
 	if _, err := e.store.Restore(bob, it.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("bob restore err = %v", err)
+	}
+
+	// Nor can a new account that reuses the name "alice".
+	reused := e.acct
+	reused.Created = "1764999999"
+	if _, err := e.store.Restore(reused, it.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("reused-name restore err = %v", err)
+	}
+	if list, _ := e.store.ListFor(reused); len(list) != 0 {
+		t.Fatalf("reused name sees old items: %+v", list)
 	}
 
 	// Never overwrite: a new file at the same path blocks restore.

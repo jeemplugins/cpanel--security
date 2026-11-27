@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,9 @@ type fixture struct {
 	fw    *firewall.Memory
 	homes map[string]string
 	dir   string
+	// created is each account's creation stamp; change it to simulate the
+	// account being deleted and a new one made with the same name.
+	created map[string]string
 }
 
 func newFixture(t *testing.T) fixture {
@@ -50,6 +54,7 @@ func newFixture(t *testing.T) fixture {
 	}
 	t.Cleanup(func() { alog.Close() })
 	fa, _ := LoadFileAllowlist(filepath.Join(dir, "allow.json"))
+	created := map[string]string{"alice": "1764000000", "bob": "1764000001"}
 
 	srv := &Server{
 		Detector:   det,
@@ -62,11 +67,11 @@ func newFixture(t *testing.T) fixture {
 			if !ok {
 				return quarantine.Account{}, errors.New("no such user")
 			}
-			return quarantine.Account{User: u, Home: h, UID: uint32(os.Getuid()), GID: uint32(os.Getgid())}, nil
+			return quarantine.Account{User: u, Home: h, UID: uint32(os.Getuid()), GID: uint32(os.Getgid()), Created: created[u]}, nil
 		},
 		AllowAnyPeer: true,
 	}
-	return fixture{srv: srv, fw: fw, homes: homes, dir: dir}
+	return fixture{srv: srv, fw: fw, homes: homes, dir: dir, created: created}
 }
 
 func user(name, verb string, args map[string]string) Request {
@@ -161,6 +166,51 @@ func TestUserFlowAndIsolation(t *testing.T) {
 	}
 	if r := f.srv.Handle(user("alice", "restore", map[string]string{"id": id})); !r.OK {
 		t.Fatal(r.Error)
+	}
+}
+
+// A new account that reuses a deleted account's username must not inherit
+// its safe list or quarantined files.
+func TestReusedUsernameStartsClean(t *testing.T) {
+	f := newFixture(t)
+	os.WriteFile(filepath.Join(f.homes["alice"], "public_html", "ok.php"), []byte("ok"), 0o644)
+	r := f.srv.Handle(user("alice", "quarantine", map[string]string{"path": "public_html/bad.php"}))
+	if !r.OK {
+		t.Fatal(r.Error)
+	}
+	id := r.Data.(*quarantine.Item).ID
+	if r := f.srv.Handle(user("alice", "allowlist_file", map[string]string{"path": "public_html/ok.php"})); !r.OK {
+		t.Fatal(r.Error)
+	}
+
+	// alice is removed and a new "alice" account is created.
+	f.created["alice"] = "1764999999"
+
+	r = f.srv.Handle(user("alice", "list_findings", nil))
+	data := r.Data.(map[string]any)
+	if q := data["quarantined"].([]quarantine.Item); len(q) != 0 {
+		t.Fatalf("new alice sees old quarantine: %+v", q)
+	}
+	if a := data["allowlisted"].([]string); len(a) != 0 {
+		t.Fatalf("new alice inherited old safe list: %v", a)
+	}
+	if r := f.srv.Handle(user("alice", "restore", map[string]string{"id": id})); r.OK {
+		t.Fatal("new alice restored the old account's file")
+	}
+
+	// Marking a file safe as the new account drops the old entries for good.
+	if r := f.srv.Handle(user("alice", "allowlist_file", map[string]string{"path": "public_html/ok.php"})); !r.OK {
+		t.Fatal(r.Error)
+	}
+	b, _ := os.ReadFile(filepath.Join(f.dir, "allow.json"))
+	if strings.Contains(string(b), ":1764000000") {
+		t.Fatalf("old account's entries kept on disk: %s", b)
+	}
+
+	// The admin still sees the old item in the server-wide list.
+	r = f.srv.Handle(admin("list_quarantine", nil))
+	if items := r.Data.([]quarantine.Item); len(items) != 1 {
+		t.Fatalf("admin list = %+v", items)
 	}
 }
 

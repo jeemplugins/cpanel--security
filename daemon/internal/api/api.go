@@ -177,7 +177,7 @@ func (s *Server) admin(req Request) Response {
 	case "recent_failures":
 		return ok(s.Detector.Recent(limit(a["limit"], 100, 500)))
 	case "list_quarantine":
-		items, err := s.Quarantine.List("")
+		items, err := s.Quarantine.List()
 		if err != nil {
 			return fail("cannot read quarantine")
 		}
@@ -198,13 +198,13 @@ func (s *Server) user(req Request, acct quarantine.Account) Response {
 	case "list_findings":
 		// Until the malware scanner lands, findings are this account's
 		// quarantined files and allowlisted paths.
-		items, err := s.Quarantine.List(acct.User)
+		items, err := s.Quarantine.ListFor(acct)
 		if err != nil {
 			return fail("cannot read quarantine")
 		}
 		return ok(map[string]any{
 			"quarantined": items,
-			"allowlisted": s.FileAllow.List(acct.User),
+			"allowlisted": s.FileAllow.List(acct),
 		})
 	case "quarantine":
 		it, err := s.Quarantine.Quarantine(acct, a["path"], "quarantined by account owner", s.now())
@@ -228,7 +228,7 @@ func (s *Server) user(req Request, acct quarantine.Account) Response {
 			return fail(userErr(err))
 		}
 		syscall.Close(fd)
-		if err := s.FileAllow.Add(acct.User, comps); err != nil {
+		if err := s.FileAllow.Add(acct, comps); err != nil {
 			return fail("cannot save allowlist")
 		}
 		return ok(nil)
