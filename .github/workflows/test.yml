@@ -12,10 +12,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: daemon/go.mod
+          # The daemon uses only the standard library, so there is no go.sum
+          # to key a module cache on.
+          cache: false
       - name: gofmt
         run: test -z "$(gofmt -l daemon)"
       - name: Go vet and unit tests
