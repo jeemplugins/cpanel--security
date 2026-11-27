@@ -2,7 +2,7 @@
   {
     "type": "link",
     "id": "sentinel",
-    "name": "Security",
+    "name": "Sentinel Security",
     "group_id": "security",
     "order": 50,
     "uri": "sentinel/index.live.pl",

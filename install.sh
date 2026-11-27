@@ -107,7 +107,7 @@ for _ in 1 2 3 4 5; do
     sleep 1
 done
 if systemctl is-active --quiet sentineld && [ -S /run/sentinel/sentinel.sock ]; then
-    echo "Done. Open WHM > Plugins > Sentinel Security. Account owners see Security > Security in cPanel."
+    echo "Done. Open WHM > Plugins > Sentinel Security. Account owners see Security > Sentinel Security in cPanel."
 else
     die "sentineld did not start; see: journalctl -u sentineld"
 fi
