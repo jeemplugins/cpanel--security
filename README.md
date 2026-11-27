@@ -75,7 +75,7 @@ make build        # needs Go 1.24+; or copy a prebuilt dist/sentineld here
 ./install.sh
 ```
 
-Supported cPanel versions are 110 (LTS), 134 (LTS), 136 and 138, on AlmaLinux or CloudLinux 8 and 9, or Ubuntu 24.04. Older servers on Rocky Linux 8 or 9, or Ubuntu 22.04 (which cPanel supports only up to version 134), also work, but cPanel no longer installs new servers on those systems. So far only cPanel 138 on AlmaLinux 9 has been tested. Running `install.sh` again upgrades in place and keeps your config, bans and quarantine.
+Supported cPanel versions are 110 (LTS), 134 (LTS), 136 and 138, on AlmaLinux or CloudLinux 8 and 9, or Ubuntu 24.04. Older servers on Rocky Linux 8 or 9, or Ubuntu 22.04 (which cPanel supports only up to version 134), also work, but cPanel no longer installs new servers on those systems. Tested so far: cPanel 138 on AlmaLinux 9, and cPanel 110 (build 164) on AlmaLinux 8. Running `install.sh` again upgrades in place and keeps your config, bans and quarantine.
 
 Uninstall with `./uninstall.sh`. This removes all bans. It keeps config, quarantine and logs unless you pass `--purge`.
 
@@ -115,15 +115,18 @@ The end-to-end test starts the real daemon with a dry-run firewall and writes a 
 
 ## Tested on a real server
 
-Tested on AlmaLinux 9 with cPanel & WHM 138 (without a license, so the pages were run from the command line, not a browser):
+Tested on AlmaLinux 9 with cPanel & WHM 138, and on AlmaLinux 8 with cPanel & WHM 110 (build 164). Neither server had a license, so the pages were run from the command line, not a browser. Both versions passed all of these:
 
 - Install, uninstall and reinstall. The socket is mode 0600 and the nftables table is created.
-- Brute-force blocking from the real `login_log` (cPanel 138 format), unblock, and the audit log.
+- Brute-force blocking from the real `login_log` (the same format on both), unblock, and the audit log.
 - The WHM page run as root: every section renders, POST block works, non-root is refused, allowlisted IPs can't be blocked.
 - Quarantine and restore for an account, and refusal of `../` and symlink escapes.
+- A daemon restart after an unblock doesn't ban the IP again.
+
+On 110, the login log uses the same format as 138, and cPanel loads the AdminBin module from `/var/cpanel/perl`. A 110 server that was never updated past early builds hasn't been tested.
 
 ## Not yet verified
 
 - The cPanel and WHM pages in a browser (needs a licensed server).
-- The UAPI to AdminBin path end to end, after the fixes from the first server test.
+- The `uapi` command and the cPanel page calling the UAPI module (both need a license). The UAPI module, AdminBin and daemon were tested together by calling the module directly.
 - Whether the new `sentinel` feature is on by default in Feature Manager.
