@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -201,7 +202,8 @@ func lookupAccount(name string) (quarantine.Account, error) {
 	if !usernameRE.MatchString(name) {
 		return quarantine.Account{}, errors.New("invalid username")
 	}
-	if _, err := os.Stat(filepath.Join("/var/cpanel/users", name)); err != nil {
+	userFile, err := os.ReadFile(filepath.Join("/var/cpanel/users", name))
+	if err != nil {
 		return quarantine.Account{}, errors.New("not a cPanel account")
 	}
 	u, err := user.Lookup(name)
@@ -213,7 +215,19 @@ func lookupAccount(name string) (quarantine.Account, error) {
 	if err1 != nil || err2 != nil || uid == 0 {
 		return quarantine.Account{}, errors.New("refusing system account")
 	}
-	return quarantine.Account{User: name, Home: u.HomeDir, UID: uint32(uid), GID: uint32(gid)}, nil
+	return quarantine.Account{User: name, Home: u.HomeDir, UID: uint32(uid), GID: uint32(gid), Created: startDate(userFile)}, nil
+}
+
+// startDate returns the STARTDATE line of a cPanel user file: when this
+// account was created, which tells it apart from a later account with the
+// same name.
+func startDate(userFile []byte) string {
+	for _, line := range strings.Split(string(userFile), "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "STARTDATE="); ok {
+			return v
+		}
+	}
+	return ""
 }
 
 func loadBans(path string) ([]detector.Ban, error) {

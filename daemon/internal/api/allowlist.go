@@ -7,10 +7,14 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/jeemplugins/cpanel--security/daemon/internal/quarantine"
 )
 
 // FileAllowlist records files an account owner has marked as safe, so the
-// scanner skips them. Paths are stored relative to the account's home.
+// scanner skips them. Paths are stored relative to the account's home and
+// keyed by quarantine.Account.Key(), so a new account that reuses a deleted
+// account's username starts with an empty list.
 type FileAllowlist struct {
 	Path string
 
@@ -32,10 +36,18 @@ func LoadFileAllowlist(path string) (*FileAllowlist, error) {
 
 const maxAllowlistPerUser = 1000
 
-func (fa *FileAllowlist) Add(user string, comps []string) error {
+func (fa *FileAllowlist) Add(acct quarantine.Account, comps []string) error {
 	p := strings.Join(comps, "/")
+	user := acct.Key()
 	fa.mu.Lock()
 	defer fa.mu.Unlock()
+	// Drop entries left by a deleted account with the same username
+	// (including the old format, keyed by bare username).
+	for k := range fa.m {
+		if k != user && (k == acct.User || strings.HasPrefix(k, acct.User+":")) {
+			delete(fa.m, k)
+		}
+	}
 	for _, existing := range fa.m[user] {
 		if existing == p {
 			return nil
@@ -57,8 +69,8 @@ func (fa *FileAllowlist) Add(user string, comps []string) error {
 	return os.Rename(tmp, fa.Path)
 }
 
-func (fa *FileAllowlist) List(user string) []string {
+func (fa *FileAllowlist) List(acct quarantine.Account) []string {
 	fa.mu.Lock()
 	defer fa.mu.Unlock()
-	return append([]string{}, fa.m[user]...)
+	return append([]string{}, fa.m[acct.Key()]...)
 }

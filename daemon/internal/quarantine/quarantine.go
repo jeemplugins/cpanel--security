@@ -30,13 +30,23 @@ type Account struct {
 	Home string
 	UID  uint32
 	GID  uint32
+	// Created identifies this particular account (cPanel's STARTDATE), so
+	// an account created later with the same username is a different owner.
+	Created string
+}
+
+// Key identifies the owner of per-account data. A deleted account's data
+// never matches a new account that reuses the username.
+func (a Account) Key() string {
+	return fmt.Sprintf("%s:%d:%s", a.User, a.UID, a.Created)
 }
 
 // Item describes one quarantined file.
 type Item struct {
 	ID          string    `json:"id"`
 	User        string    `json:"user"`
-	Path        string    `json:"path"` // relative to the account's home
+	Owner       string    `json:"owner,omitempty"` // Account.Key() of the owner
+	Path        string    `json:"path"`            // relative to the account's home
 	Mode        uint32    `json:"mode"`
 	Size        int64     `json:"size"`
 	SHA256      string    `json:"sha256"`
@@ -101,6 +111,7 @@ func (s *Store) Quarantine(acct Account, path, reason string, now time.Time) (*I
 	item := &Item{
 		ID:          id,
 		User:        acct.User,
+		Owner:       acct.Key(),
 		Path:        strings.Join(comps, "/"),
 		Mode:        st.Mode & 0o7777 &^ (syscall.S_ISUID | syscall.S_ISGID),
 		Size:        size,
@@ -130,7 +141,7 @@ func (s *Store) Restore(acct Account, id string) (*Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	if item.User != acct.User {
+	if item.Owner != acct.Key() {
 		return nil, ErrNotFound // don't reveal other accounts' items
 	}
 	comps, err := pathguard.Split(acct.Home, item.Path)
@@ -198,8 +209,19 @@ func (s *Store) Get(id string) (*Item, error) {
 	return &it, nil
 }
 
-// List returns items for user, or every item when user is "".
-func (s *Store) List(user string) ([]Item, error) {
+// List returns every item, for the server admin.
+func (s *Store) List() ([]Item, error) {
+	return s.list(func(*Item) bool { return true })
+}
+
+// ListFor returns the items that belong to this account. Items left by a
+// deleted account with the same username are not included.
+func (s *Store) ListFor(acct Account) ([]Item, error) {
+	key := acct.Key()
+	return s.list(func(it *Item) bool { return it.Owner == key })
+}
+
+func (s *Store) list(keep func(*Item) bool) ([]Item, error) {
 	entries, err := os.ReadDir(s.Dir)
 	if err != nil {
 		return nil, err
@@ -214,7 +236,7 @@ func (s *Store) List(user string) ([]Item, error) {
 		if err != nil {
 			continue
 		}
-		if user == "" || it.User == user {
+		if keep(it) {
 			out = append(out, *it)
 		}
 	}
